@@ -6,17 +6,14 @@ import sys
 module_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..'))
 if module_path not in sys.path:
     sys.path.append(module_path)
-
-    
-from Data.LoadData import LoadData
-
-from line_profiler import LineProfiler
+from data.loadData import LoadData
+# from line_profiler import LineProfiler
 
 class Preprocess:
     def __init__(self):
         pass
 
-    @profile
+    # @profile
     def preprocess_data(self, data, x_length, y_length, slide=1):
         '''
         Split and standardize data.

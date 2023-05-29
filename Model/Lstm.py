@@ -3,13 +3,50 @@ from keras.layers import Dense, Dropout, LSTM
 from keras.models import Sequential
 from keras.callbacks import EarlyStopping
 from tqdm import tqdm
-
+import sys
+import os
+module_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..'))
+if module_path not in sys.path:
+    sys.path.append(module_path)
+from data.loadData import LoadData
+from data.preprocess import Preprocess
 
 class Lstm:
     def __init__(self):
         pass
+    
+    def lstm(self, x_train, y_train, x_test, y_test, test_data, train_data, y_length):
+        """
+        Trains and predicts using LSTM model.
 
-    def LSTM_model(self, y_length, input_shape):
+        Args:
+            x_train (array): Training input data.
+            y_train (array): Training target data.
+            x_test (array): Test input data.
+            y_test (array): Test target data.
+            test_data (array): Data for prediction.
+            train_data (array): Training data.
+            y_length (int): Length of the target data.
+
+        Returns:
+            array: Processed signal obtained from predictions.
+        """
+        model = self._build(x_train, y_length)
+        history = self._train(train_data, model, x_train, y_train)
+        processed_signal = self._predict(x_test, y_test, test_data, model)
+        return processed_signal
+
+    def _construct(self, y_length, input_shape):
+        """
+        Constructs an LSTM model.
+
+        Args:
+            y_length (int): Length of the target data.
+            input_shape (tuple): Shape of the input data.
+
+        Returns:
+            Sequential: Constructed LSTM model.
+        """
         model = Sequential()
         model.add(LSTM(units = 256, return_sequences = True, input_shape = input_shape))
         model.add(Dropout(0.4))
@@ -20,29 +57,88 @@ class Lstm:
         model.add(Dense(units=y_length))
         return model
     
-    def build_Lstm_model(self, x_train, y_length):
-        model = {}
+    def _build(self, x_train, y_length):
+        """
+        Builds a list of LSTM models.
+
+        Args:
+            x_train (array): Training input data.
+            y_length (int): Length of the target data.
+
+        Returns:
+            list: List of built LSTM models.
+        """
+        model = list(range(0, x_train.shape[0]))
         input_shape = (x_train.shape[2],1)
         for i in range(0, x_train.shape[0]):
-            model[i] = self.LSTM_model(y_length, input_shape)
+            model[i] = self._construct(y_length, input_shape)
             model[i].compile(optimizer='adam', 
                         loss='mean_squared_error')
             # model[i].summary()
         return model
     
-    def train_Lstm_model(self, train_data, model, x_train, y_train):
-        history = {}
+    def _train(self, train_data, model, x_train, y_train):
+        """
+        Trains the LSTM models.
+
+        Args:
+            train_data (array): Training data.
+            model (list): List of LSTM models.
+            x_train (array): Training input data.
+            y_train (array): Training target data.
+
+        Returns:
+            list: List of training histories.
+        """
+        history = list(range(0, train_data.shape[0]))
         for i in tqdm(range(0, train_data.shape[0])):
             earlystopper = EarlyStopping(monitor = 'val_loss', patience = 5, verbose = 2)
             history[i] = model[i].fit(x_train[i], y_train[i], epochs=25, batch_size=32, 
                                 callbacks = [earlystopper], validation_split = 0.2, shuffle=True)
         return history
     
-    def predicting_creat_processed_signal_Lstm(self, x_test, test_data, model):
-        processed_signal = np.ndarray([])
-        for i in test_data:
+    def _predict(self, x_test, y_test, test_data, model):
+        """
+        Generates predictions using the trained models.
+
+        Args:
+            x_test (array): Test input data.
+            y_test (array): Test target data.
+            test_data (array): Data for prediction.
+            model (list): List of LSTM models.
+
+        Returns:
+            y: numpy.ndarray
+                Processed signal obtained from predictions.
+                shape = (number of windows, number of split y, length of y)
+        """
+        processed_signal = np.ndarray([y_test.shape[0], y_test.shape[1], y_test.shape[2]])
+        for i in tqdm(range(0, test_data.shape[0])):
             predicted_prices = model[i].predict(x_test[i])
-            processed_signal[i] = {}
-            # processed_signal[i][0] = pd.DataFrame(
-            #     {'Close': predicted_prices.flatten()}, index=test_data[i].index[:len(predicted_prices.flatten())])
+            processed_signal[i] = predicted_prices
         return processed_signal
+    
+if __name__ == '__main__':
+    stock_name = "^GSPC"
+    date_predict_start = '2020-01-01'
+    window_length = 30
+    slide_range = 40
+    total_windows = 3
+    slide = 5
+    dataloader = LoadData(total_windows, window_length)
+    train_data, test_data =\
+        dataloader.load_and_split_data(stock_name, date_predict_start, window_length, slide_range, total_windows)
+    x_length = 3
+    y_length = 5
+    preprocesser = Preprocess()
+    x_train, y_train =\
+        preprocesser.preprocess_data(train_data, x_length, y_length)
+    x_test, y_test =\
+        preprocesser.preprocess_data(test_data, x_length, y_length, slide=slide)
+    lstm = Lstm()
+    processed_signal = lstm.lstm(x_train, y_train, x_test, y_test, test_data, train_data, y_length)
+    # model = lstm._build(x_train, y_length)
+    # history = lstm._train(train_data, model, x_train, y_train)
+    # processed_signal = lstm._predict(x_test, y_test, test_data, model)
+    # print(processed_signal)
+    # print(processed_signal.shape)
