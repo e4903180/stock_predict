@@ -15,7 +15,7 @@ class Lstm:
     def __init__(self):
         pass
     
-    def lstm(self, x_train, y_train, x_test, y_test, test_data, train_data, y_length):
+    def lstm(self, x_train, y_train, x_test, y_test, train_data, test_data, y_length):
         """
         Trains and predicts using LSTM model.
 
@@ -33,8 +33,9 @@ class Lstm:
         """
         model = self._build(x_train, y_length)
         history = self._train(train_data, model, x_train, y_train)
-        processed_signal = self._predict(x_test, y_test, test_data, model)
-        return processed_signal
+        predicted_y = self._predict(x_test, y_test, test_data, model)
+        # processed_signal = self._flatten(predicted_y)
+        return predicted_y
 
     def _construct(self, y_length, input_shape):
         """
@@ -108,15 +109,34 @@ class Lstm:
             model (list): List of LSTM models.
 
         Returns:
-            y: numpy.ndarray
+            predicted_y: numpy.ndarray
                 Processed signal obtained from predictions.
                 shape = (number of windows, number of split y, length of y)
         """
-        processed_signal = np.ndarray([y_test.shape[0], y_test.shape[1], y_test.shape[2]])
+        predicted_y = np.ndarray([y_test.shape[0], y_test.shape[1], y_test.shape[2]])
         for i in tqdm(range(0, test_data.shape[0])):
             predicted_prices = model[i].predict(x_test[i])
-            processed_signal[i] = predicted_prices
-        return processed_signal
+            predicted_y[i] = predicted_prices
+        return predicted_y
+    
+    # def _flatten(self, predicted_y):
+    #     """
+    #     flatten predictions.
+
+    #     Args:
+    #         predicted_y: numpy.ndarray
+    #             Predicted signal obtained from predictions.
+    #             shape = (number of windows, number of split y, length of y)
+
+    #     Returns:
+    #         processed_signal: numpy.ndarray
+    #             Processed signal flatten from predicted_y.
+    #             shape = (number of windows, 1, window_length)
+    #     """
+    #     processed_signal = np.ndarray([predicted_y.shape[0], 1, predicted_y.shape[1]*predicted_y.shape[2]])
+    #     for window in range(0, predicted_y.shape[0]):
+    #         processed_signal[window][0] = predicted_y[window].flatten()
+    #     return processed_signal
     
 if __name__ == '__main__':
     stock_name = "^GSPC"
@@ -128,17 +148,17 @@ if __name__ == '__main__':
     dataloader = LoadData(total_windows, window_length)
     train_data, test_data =\
         dataloader.load_and_split_data(stock_name, date_predict_start, window_length, slide_range, total_windows)
-    x_length = 3
+    x_length = 5
     y_length = 5
     preprocesser = Preprocess()
-    x_train, y_train =\
-        preprocesser.preprocess_data(train_data, x_length, y_length)
-    x_test, y_test =\
-        preprocesser.preprocess_data(test_data, x_length, y_length, slide=slide)
+    x_train, y_train, scaler_train =\
+        preprocesser.preprocess_train_data(train_data, x_length, y_length)
+    x_test, y_test, scaler_test =\
+        preprocesser.preprocess_test_data(train_data, test_data, x_length, y_length, slide)
     lstm = Lstm()
     processed_signal = lstm.lstm(x_train, y_train, x_test, y_test, test_data, train_data, y_length)
     # model = lstm._build(x_train, y_length)
     # history = lstm._train(train_data, model, x_train, y_train)
     # processed_signal = lstm._predict(x_test, y_test, test_data, model)
-    # print(processed_signal)
-    # print(processed_signal.shape)
+    print(processed_signal)
+    print(processed_signal.shape)

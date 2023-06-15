@@ -1,17 +1,79 @@
-from tqdm import tqdm
 import numpy as np
+import math
 
-class Postprocessing:
+class Postprocess:
     def __init__(self):
         pass
 
-    def find_data_pv_function(self, data, pv_range):
+    def postprocess_lstm(self, predicted_y, scaler):
+        inversed_signal = self._inverse_transfer(predicted_y, scaler)
+        processed_lstm_signal = self._flatten(inversed_signal)
+        return processed_lstm_signal
+    
+    def _inverse_transfer(self, predicted_y, scaler):
+        """
+        flatten predictions.
+
+        Args:
+            predicted_y: numpy.ndarray
+                Predicted signal obtained from predictions.
+                shape = (number of windows, number of split y, length of y)
+
+        Returns:
+            processed_signal: numpy.ndarray
+                Processed signal flatten from predicted_y.
+                shape = (number of windows, 1, window_length)
+        """
+
+        inversed_signal = np.zeros_like(predicted_y)
+        for window in range(0, predicted_y.shape[0]):
+            inversed_signal[window] = scaler.inverse_transform(predicted_y[window])
+        return inversed_signal
+    
+    def _flatten(self, inversed_signal):
+        """
+        flatten predictions.
+
+        Args:
+            predicted_y: numpy.ndarray
+                Predicted signal obtained from predictions.
+                shape = (number of windows, number of split y, length of y)
+
+        Returns:
+            processed_signal: numpy.ndarray
+                Processed signal flatten from predicted_y.
+                shape = (number of windows, 1, window_length)
+        """
+
+        flatten_signal = np.ndarray([inversed_signal.shape[0], inversed_signal.shape[1]*inversed_signal.shape[2]])
+        for window in range(0, inversed_signal.shape[0]):
+            flatten_signal[window] = inversed_signal[window].flatten()
+        return flatten_signal
+    
+    def postprocess_fft(self, mixed_train_harm, mixed_test_harm, pv_range, pv_train_data, fit_method):
+        pv_mixed_train_harm = self.find_data_pv(mixed_train_harm, pv_range)
+        lead_mixed_train_harm = self.find_fft_lead(pv_train_data, pv_mixed_train_harm)
+        errors = self._get_fit_error(lead_mixed_train_harm, fit_method)
+        best_fit_harm, best_fit_error = self._get_best_fit(errors)
+        processed_signal = self._pick_best_fit_harm(mixed_test_harm, best_fit_harm)
+        return processed_signal, best_fit_harm, best_fit_error
+
+    def find_data_pv(self, data, pv_range):
         '''
         Find peaks and valleys of the data, excluding the first and last data points.
 
         Args:
             data: numpy.ndarray
                 The input data array.
+                    fft_processed_signal: numpy.ndarray 
+                        The processed signal obtained by mixing the selected harmonics.
+                        shape: (number of windows, number of mixed harmonics, window_length)
+                        
+                    lstm_y: numpy.ndarray
+                        Processed signal obtained from predictions.
+                        shape = (number of windows, number of split y, length of y)
+                        flatten -> (number of windows, window_length)
+
             pv_range: int
                 The range within which peaks and valleys are detected.
 
@@ -23,119 +85,298 @@ class Postprocessing:
         Raises:
             None
         '''
-
         pv = np.zeros_like(data)
-        for col in range(0, data.shape[0]):
-            for row in range(1, data.shape[1]-1):
-                if row < pv_range:
-                    if data[col, row] == data[col, :row+pv_range+1].max():
-                        pv[col, row] = 1
-                    if data[col, row] == data[col, :row+pv_range+1].min():
-                        pv[col, row] = -1   
-                else:
-                    if data[col, row] == data[col, row-pv_range:row+pv_range+1].max():
-                        pv[col, row] = 1   
-                    if data[col, row] == data[col, row-pv_range:row+pv_range+1].min():
-                        pv[col, row] = -1
+        if len(pv.shape) == 3:
+            for window in range(0, data.shape[0]):
+                for harmonics in range(0, data.shape[1]):
+                    pv[window, harmonics] = self._find_pv(data[window, harmonics], pv_range)
+        elif len(pv.shape) == 2:
+            for window in range(0, data.shape[0]):
+                pv[window] = self._find_pv(data[window], pv_range)
         return pv
+    
+    def _find_pv(self, data, pv_range):
+        """
+        Find peaks and valleys in the data.
 
-    def find_signal_lead_train_function(self, data, processed_signal):
-        for d in data:
-            for p in processed_signal[d]:
-                # processed_signal[d][p]['pv'] = pd.Series(dtype='str')
-                processing_signal = processed_signal[d][p].head(len(data[d]))
-                p_data = pd.DataFrame(
-                    {'peaks': data[d]['peaks'], 'count': range(len(data[d]))})
-                p_data = p_data.drop(p_data[p_data['peaks'].isna()].index)
-                p_data_count = list(p_data['count'])
-                p_signal = pd.DataFrame(
-                    {'peaks': processing_signal['peaks'], 'count': range(len(processing_signal))})
-                p_signal = p_signal.drop(p_signal[p_signal['peaks'].isna()].index)
-                p_signal_list = list(p_signal['count'])
-                p_lead = []
-                for i in range(0, len(p_signal_list)):
-                    temp = []
-                    temp_abs = []
-                    temp_2 = []
-                    for j in range(0, len(p_data_count)):
-                        temp.append((p_data_count[j] - p_signal_list[i]))
-                        temp_abs.append(abs(p_data_count[j] - p_signal_list[i]))
-                    for k in range(0, len(temp_abs)):
-                        if temp_abs[k] == min(temp_abs):
-                            temp_2 = temp[k]
-                    p_lead.append(temp_2)
-                p_signal['lead'] = p_lead
+        Args:
+            data (numpy.ndarray):
+                The input data array.
+            pv_range (int):
+                The range within which peaks and valleys are detected.
 
-                v_data = pd.DataFrame(
-                    {'valleys': data[d]['valleys'], 'count': range(len(data[d]))})
-                v_data = v_data.drop(v_data[v_data['valleys'].isna()].index)
-                v_data_count = list(v_data['count'])
-                v_signal = pd.DataFrame(
-                    {'valleys': processing_signal['valleys'], 'count': range(len(processing_signal))})
-                v_signal = v_signal.drop(
-                    v_signal[v_signal['valleys'].isna()].index)
-                v_signal_list = list(v_signal['count'])
-                v_lead = []
-                for i in range(0, len(v_signal_list)):
-                    temp = []
-                    temp_abs = []
-                    temp_2 = []
-                    for j in range(0, len(v_data_count)):
-                        temp.append((v_data_count[j] - v_signal_list[i]))
-                        temp_abs.append(abs(v_data_count[j] - v_signal_list[i]))
-                    for k in range(0, len(temp_abs)):
-                        if temp_abs[k] == min(temp_abs):
-                            temp_2 = temp[k]
-                    v_lead.append(temp_2)
-                v_signal['lead'] = v_lead
+        Returns:
+            pv (numpy.ndarray):
+                An array of the same shape as `data`, where peaks are represented by 1,
+                valleys are represented by -1, and other points are represented by 0.
 
-                processed_signal[d][p]['lead'] = pd.Series(dtype='float64')
-                processed_signal[d][p]['lead'].loc[p_signal['lead'].index] = p_signal['lead']
-                processed_signal[d][p]['lead'].loc[v_signal['lead'].index] = v_signal['lead']
+        Raises:
+            None
+        """
+        pv = np.zeros_like(data)
+        for l in range(1, data.shape[0]): # Ignore pv on the first data point
+            if l < pv_range:
+                if data[l] == data[:l+pv_range+1].max():
+                    pv[l] = 1
+                if data[l] == data[:l+pv_range+1].min():
+                    pv[l] = -1   
+            else:
+                if data[l] == data[l-pv_range:l+pv_range+1].max():
+                    pv[l] = 1   
+                if data[l] == data[l-pv_range:l+pv_range+1].min():
+                    pv[l] = -1
+        return pv
+    
+    def _find_peak_lead(self, element, pv_data, pv_signal):
+        """
+        Find the lead for a peak element.
 
-    def get_first_lead_function(self, processed_signal, best_fit_harm):
-        first_date = {}
-        lead = {}
-        pv = {}
-        for i in processed_signal:
-            harm = best_fit_harm[i]
-            temp = processed_signal[i][harm].loc[list(
-                processed_signal[i][harm]['lead'].dropna().index)[0]]
-            first_date[i] = list(processed_signal[i][harm]
-                                ['lead'].dropna().index)[0]
-            lead[i] = temp['lead']
-            pv[i] = temp['pv']
-        return first_date, lead, pv
+        Args:
+            element (tuple):
+                Tuple containing the index and value of the element.
+            pv_train_data (numpy.ndarray):
+                Data array used for finding peaks and valleys.
+                shape: (window_length)
+            pv_signal (numpy.ndarray):
+                Signal array containing peaks (1), valleys (-1), and others (0).
+                shape: (window_length)
 
-    def get_fit_error_function(self, processed_signal, fit_method):
-        errors = {}
-        error = []
-        for i in processed_signal:
-            errors[i] = {}
-            for j in processed_signal[i]:
-                signal_dropna = processed_signal[i][j].drop(
-                    processed_signal[i][j][processed_signal[i][j]['lead'].isna()].index)
+        Returns:
+            lead (int):
+                Lead value for the peak element.
+
+        Raises:
+            None
+        """
+        front = 'NULL'
+        back = 'NULL'
+        lead = None
+        forword = list(range(0, len(pv_signal)-element[0]))
+        backword = list(range(0, element[0]+1))
+        for i in forword:
+            if pv_data[element[0]+i] == 1:
+                front = i
+                break 
+        for i in backword:
+            if pv_data[element[0]-i] == 1:
+                back = -i
+                break
+        if front == 'NULL' and back == 'NULL':
+            print('no peaks or valleys lead in data')
+        elif front != 'NULL' and back == 'NULL':
+            lead = front
+        elif front == 'NULL' and back != 'NULL':
+            lead = back
+        elif front <= np.absolute(back):
+            lead = front
+        elif front > np.absolute(back):
+            lead = back
+        return lead
+
+    def _find_valley_lead(self, element, pv_train_data, pv_signal):
+        """
+        Find the lead for a valley element.
+
+        Args:
+            element (tuple):
+                Tuple containing the index and value of the element.
+            pv_train_data (numpy.ndarray):
+                Data array used for finding peaks and valleys.
+                shape: (window_length)
+            pv_signal (numpy.ndarray):
+                Signal array containing peaks (1), valleys (-1), and others (0).
+                shape: (window_length)
+
+        Returns:
+            lead (int):
+                Lead value for the valley element.
+
+        Raises:
+            None
+        """
+        front = 'NULL'
+        back = 'NULL'
+        lead = None
+        forword = list(range(0, len(pv_signal)-element[0]))
+        backword = list(range(0, element[0]+1))
+        for i in forword:
+            if pv_train_data[element[0]+i] == -1:
+                front = i
+                break 
+        for i in backword:
+            if pv_train_data[element[0]-i] == -1:
+                back = -i
+                break
+        if front == 'NULL' and back == 'NULL':
+            print('no peaks or valleys lead in data')
+        elif front != 'NULL' and back == 'NULL':
+            lead = front
+        elif front == 'NULL' and back != 'NULL':
+            lead = back
+        elif front <= np.absolute(back):
+            lead = front
+        elif front > np.absolute(back):
+            lead = back
+        return lead
+    
+    def find_lead(self, pv_data, pv_signal):
+        """
+        Find the lead values for peak and valley elements.
+
+        Args:
+            pv_data (numpy.ndarray):
+                Data array used for finding peaks and valleys.
+                shape: (number of windows, window_length)
+            pv_signal (numpy.ndarray):
+                Signal array containing peaks (1), valleys (-1), and others (0).
+                shape: (number of windows, window_length)
+
+        Returns:
+            lead_list (numpy.ndarray):
+                Array containing the lead values for each element.
+                shape: (number of windows, window_length)
+
+        Raises:
+            None
+        """
+        lead = np.ndarray([pv_signal.shape[0], pv_signal.shape[1]], dtype='object')
+        for window in range(0, pv_signal.shape[0]):
+            for element in enumerate(pv_signal[window]):
+                if element[1] == 1:
+                    lead[window, element[0]] = self._find_peak_lead(element, pv_data[window], pv_signal[window])
+                elif element[1] == -1:
+                    lead[window, element[0]] = self._find_valley_lead(element, pv_data[window], pv_signal[window])
+                else:
+                    lead[window, element[0]] = None
+        return lead
+
+    def find_fft_lead(self, pv_data, pv_fft_signal):
+        """
+        Find the lead values for peak and valley elements.
+
+        Args:
+            pv_data (numpy.ndarray):
+                Data array used for finding peaks and valleys.
+                shape: (number of windows, window_length)
+            pv_signal (numpy.ndarray):
+                Signal array containing peaks (1), valleys (-1), and others (0).
+                shape: (number of windows, window_length)
+
+        Returns:
+            lead_list (numpy.ndarray):
+                Array containing the lead values for each element.
+                shape: (number of windows, window_length)
+
+        Raises:
+            None
+        """
+        lead = np.ndarray([pv_fft_signal.shape[0], pv_fft_signal.shape[1], pv_fft_signal.shape[2]], dtype='object')
+        for window in range(0, pv_fft_signal.shape[0]):
+            for harm in range(0, pv_fft_signal.shape[1]):
+                for element in enumerate(pv_fft_signal[window, harm]):
+                    if element[1] == 1:
+                        lead[window, harm, element[0]] = self._find_peak_lead(element, pv_data[window], pv_fft_signal[window, harm])
+                    elif element[1] == -1:
+                        lead[window, harm, element[0]] = self._find_valley_lead(element, pv_data[window], pv_fft_signal[window, harm])
+                    else:
+                        lead[window, harm, element[0]] = None
+        return lead
+    
+    def _compute_error_maen(self, lead):
+        error = 0
+        for num in lead:
+            if num is not None:
+                error += num
+        return error/lead.shape[0]
+
+    def _compute_error_abs(self, lead):
+        error = 0
+        for num in lead:
+            if num is not None:
+                error += np.abs(num)
+        return error/lead.shape[0]
+
+    def _compute_error_rmse(self, lead):
+        error = 0
+        for num in lead:
+            if num is not None:
+                # error += np.abs(num)
+                mse = np.square(num).mean()
+                rmse = math.sqrt(mse)
+                error += rmse
+        return error/lead.shape[0]
+
+    def _get_fit_error(self, lead_mixed_train_harm, fit_method):
+        errors = np.ndarray([lead_mixed_train_harm.shape[0], lead_mixed_train_harm.shape[1]])
+        error = int()
+        for i in range(0, lead_mixed_train_harm.shape[0]):
+            for j in range(0, lead_mixed_train_harm.shape[1]):
                 if fit_method == 'mean':
-                    error = signal_dropna['lead'].mean()
+                    error = self._compute_error_maen(lead_mixed_train_harm[i, j])
                 elif fit_method == 'abs':
-                    error = abs(signal_dropna['lead']).mean()
+                    error = self._compute_error_abs(lead_mixed_train_harm[i, j])
                 elif fit_method == 'rmse':
-                    mse = np.square(np.subtract(np.zeros_like(
-                        signal_dropna['lead']), signal_dropna['lead'])).mean()
-                    rmse = math.sqrt(mse)
-                    error = rmse
+                    error = self._compute_error_rmse(lead_mixed_train_harm[i, j])
                 else :
                     print('worng fit_method')
-                errors[i][j] = error
+                errors[i, j] = error
         return errors
-    
-    def get_best_fit_harm_function(self, processed_signal, errors):
-        best_error = {}
-        best_fit_harm = {}
-        for i in processed_signal:
-            best_error[i] = pd.Series(errors[i]).abs().min()
-            best_fit_harm[i] = pd.Series(errors[i]).abs().idxmin()
-        return best_fit_harm, best_error
 
+    def _get_best_fit(self, errors):
+        best_fit_harm = np.ndarray(errors.shape[0])
+        best_fit_error = np.ndarray(errors.shape[0])
+        for window in range(errors.shape[0]):
+            best_fit_harm[window] = np.argmin(errors[window])
+            best_fit_error[window] = errors[window, int(best_fit_harm[window])]
+        return best_fit_harm, best_fit_error
 
+    def _pick_best_fit_harm(self, mixed_test_harm, best_fit_harm):
+        processed_signal = np.ndarray([mixed_test_harm.shape[0], mixed_test_harm.shape[2]])
+        for window in range(0, mixed_test_harm.shape[0]):
+            processed_signal[window] = mixed_test_harm[window, int(best_fit_harm[window])]
+        return processed_signal
 
+    def get_first_lead(self, pv_signal, lead_test):
+        """
+        Get the first lead values for each window.
+
+        Args:
+            pv_signal (numpy.ndarray):
+                Signal array containing peaks (1), valleys (-1), and others (0).
+                shape: (number of windows, window_length)
+            lead_test (numpy.ndarray):
+                Array containing the lead values for each element.
+                shape: (number of windows, window_length)
+
+        Returns:
+            first_date (numpy.ndarray):
+                Array containing the index of the first non-zero element in each window.
+                shape: (number of windows)
+            lead (numpy.ndarray):
+                Array containing the lead values for each window.
+                shape: (number of windows)
+            pv (numpy.ndarray):
+                Array containing the peak/valley values for each window.
+                shape: (number of windows)
+
+        Raises:
+            None
+        """
+        first_date = np.zeros(pv_signal.shape[0], dtype=object)
+        lead = np.zeros(pv_signal.shape[0], dtype=object)
+        pv = np.zeros(pv_signal.shape[0], dtype=object)
+        for window in range(0, pv_signal.shape[0]):
+            nonzero_indices = np.nonzero(lead_test[window])[0]
+            first_nonzero_index = nonzero_indices[0]
+            for i in range(0, pv_signal.shape[1]):
+                if lead_test[window, i] != None:
+                    first_date[window] = i
+                    lead[window] = lead_test[window, i]
+                    pv[window] = pv_signal[window, i]
+                    break
+            if pv[window] == 0:
+                first_date[window] = None
+                lead[window] = None
+                pv[window] = None
+                print(f'no peaks or valleys lead in data{window}')
+        return first_date, lead, pv

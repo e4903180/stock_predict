@@ -13,7 +13,10 @@ class LoadData:
         """
 
         self.train_data = np.ndarray(shape=(total_windows, window_length), dtype=float)
+        self.train_data_index = np.ndarray(shape=(total_windows, window_length), dtype=object)
         self.test_data = np.ndarray(shape=(total_windows, window_length), dtype=float)
+        self.test_data_index = np.ndarray(shape=(total_windows, window_length), dtype=object)
+        
         self.date_data_start_list = []
         self.date_predict_start_list = []
         self.date_predict_end_list = []
@@ -40,17 +43,18 @@ class LoadData:
 
         all_data = yf.Ticker(stock_name).history(period='max')
         all_data.index = all_data.index.date
-        # all_data['Close'].iloc[0:len(all_data['Close'])] = list(range(0, len(all_data['Close'])))
         date_predict_start = self._check_start(date_predict_start, all_data)
         predict_start = all_data.index.get_loc(date_predict_start)
         for i in range(total_windows):
             predict_end = predict_start + window_length
             data_start = predict_start - window_length
             self.train_data[i, :] = all_data['Close'].iloc[data_start:predict_start].values
+            self.train_data_index[i, :] = all_data['Close'].iloc[data_start:predict_start].index
             self.test_data[i, :] = all_data['Close'].iloc[predict_start:predict_end].values
+            self.test_data_index[i, :] = all_data['Close'].iloc[predict_start:predict_end].index
             data_start = data_start + slide_range
             predict_start = predict_start + slide_range
-        return self.train_data, self.test_data
+        return self.train_data, self.test_data, self.train_data_index, self.test_data_index, all_data
 
     def _check_start(self, date_predict_start, all_data):
         """Checks the start date for prediction.

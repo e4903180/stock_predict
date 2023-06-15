@@ -2,20 +2,15 @@ import sys
 import os
 import numpy as np
 
-module_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..'))
-if module_path not in sys.path:
-    sys.path.append(module_path)
-from data.loadData import LoadData
-from data.preprocess import Preprocess
-
 class Fft():
     def __init__(self):
         pass
 
     def fft(self, train_data, window_length, n_harm_lower_limit, n_harm_upper_limit):
-        harmonics = self._extract(train_data, window_length)
-        processed_signal = self._mix(harmonics, n_harm_lower_limit, n_harm_upper_limit)
-        return processed_signal, harmonics
+        harmonics_train, harmonics_test = self._extract(train_data, window_length)
+        mixed_train_harm = self._mix(harmonics_train, n_harm_lower_limit, n_harm_upper_limit)
+        mixed_test_harm = self._mix(harmonics_test, n_harm_lower_limit, n_harm_upper_limit)
+        return mixed_train_harm, mixed_test_harm, harmonics_train
 
     def _extract(self, train_data, window_length):
         '''Todo correct name of parm, order of parm.
@@ -36,7 +31,8 @@ class Fft():
             None
         '''
         f_positive_num = int((train_data.shape[1]/2)-1)
-        harmonics = np.ndarray((train_data.shape[0], f_positive_num, train_data.shape[1]))
+        harmonics_train = np.ndarray((train_data.shape[0], f_positive_num, train_data.shape[1]))
+        harmonics_test = np.ndarray((train_data.shape[0], f_positive_num, train_data.shape[1]))
         # (number of windows, number of positive frequencies, window_length)
         for window in range(0, train_data.shape[0]):
             # get data_stock's infomation
@@ -65,18 +61,20 @@ class Fft():
             indexes.reverse()       # sort indexes by amplitudes, higher -> lower
 
             # get data_all_time'size
-            time_transfer = np.arange(window_length, window_length*2)
+            time_transfer_train = np.arange(0, window_length)
+            time_transfer_test = np.arange(window_length, window_length*2)
             count=0
             # get harmonics
             for j in indexes:
                 ampli = np.absolute(
                     data_freqdom_positive[j]) / n_data     # amplitude
                 phase = np.angle(data_freqdom_positive[j])      # phase
-                harmonics[window, j] = ampli * \
-                    np.cos(2 * np.pi * f_positive[j] * time_transfer + phase)
+                harmonics_train[window, j] = ampli * \
+                    np.cos(2 * np.pi * f_positive[j] * time_transfer_train + phase)
+                harmonics_test[window, j] = ampli * \
+                    np.cos(2 * np.pi * f_positive[j] * time_transfer_test + phase)
                 count+=1
-                # print(j, count)
-        return harmonics
+        return harmonics_train, harmonics_test
 
     def _mix(self, harmonics, n_harm_lower_limit, n_harm_upper_limit):
         '''
@@ -98,43 +96,17 @@ class Fft():
         Raises:
             None
         '''
-        mixed_harmonic_num = n_harm_upper_limit - n_harm_upper_limit + 1 
-        processed_signal = np.ndarray((harmonics.shape[0], (n_harm_upper_limit-n_harm_lower_limit+1), harmonics.shape[2]))
+        if n_harm_lower_limit<1:
+            raise ValueError('n_harm_lower_limit too small')
+        mixed_harmonic_num = n_harm_upper_limit-n_harm_lower_limit+1
+        if mixed_harmonic_num<1:
+            raise ValueError('mixed_harmonic_num too small')
+        processed_signal = np.ndarray((harmonics.shape[0], mixed_harmonic_num, harmonics.shape[2]))
         # (number of windows, number of mixed harmonics, window_length*2)
         for window in range(processed_signal.shape[0]):
             for n_harm in range(processed_signal.shape[1]):
                 mixed_harmonic = np.zeros(processed_signal.shape[2])
-                for j in range(mixed_harmonic_num):
-                    mixed_harmonic += harmonics[window][j]
-                processed_signal[window][n_harm] = mixed_harmonic
+                for j in range(n_harm_lower_limit, n_harm_lower_limit+n_harm+1): #filter DC signal
+                    mixed_harmonic += harmonics[window, j]
+                processed_signal[window, n_harm] = mixed_harmonic
         return processed_signal
-
-
-if __name__ == '__main__':
-    stock_name = "^GSPC"
-    date_predict_start = '2020-01-01'
-    window_length = 30
-    slide_range = 40
-    total_windows = 3
-    slide = 5
-    n_harm_lower_limit = 1
-    n_harm_upper_limit = 30
-    dataloader = LoadData(total_windows, window_length)
-    train_data, test_data =\
-        dataloader.load_and_split_data(stock_name, date_predict_start, window_length, slide_range, total_windows)
-    x_length = 3
-    y_length = 5
-    # preprocesser = Preprocess()
-    # x_train, y_train =\
-    #     preprocesser.preprocess_data(train_data, x_length, y_length)
-    model = Fft()
-    processed_signal, harmonics = model.fft(train_data, window_length, n_harm_lower_limit, n_harm_upper_limit)
-
-    # harmonics = model.data_to_harmonics_function(train_data, window_length)
-    # processed_signal = model.mix_harmonics_function(harmonics, n_harm_lower_limit, n_harm_upper_limit)
-    # print(processed_signal)
-    # print(harmonics.shape)
-    # print(processed_signal.shape)
-
-
-
