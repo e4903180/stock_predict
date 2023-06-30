@@ -75,16 +75,3 @@ class LoadData:
                 relativedelta(days=+1)
             check = date_predict_start in list(all_data.index)
         return date_predict_start
-
-
-if __name__ == '__main__':
-    stock_name = "^GSPC"
-    date_predict_start = '2020-01-01'
-    window_length = 10
-    slide_range = 10
-    total_windows = 5
-    dataloader = LoadData(total_windows, window_length)
-    train_data, test_data =\
-        dataloader.load_and_split_data(stock_name, date_predict_start, window_length, slide_range, total_windows)
-    print(train_data)
-    print(train_data.shape)

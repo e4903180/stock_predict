@@ -16,7 +16,7 @@ class Preprocess:
         split_num = len(range(x_length+y_length, train_data.shape[1]))+1
         train_x = np.ndarray((train_data.shape[0], split_num, x_length, 1)) 
         train_y = np.ndarray((train_data.shape[0], split_num, y_length, 1)) 
-        scaler = MinMaxScaler(feature_range=(-1,1))
+        scaler = MinMaxScaler(feature_range=(0,1))
         for window in range(0, train_data.shape[0]):
             scaled_data_train = scaler.fit_transform(train_data[window].reshape(-1,1))
             split_count = 0
@@ -30,7 +30,7 @@ class Preprocess:
             split_num = len(range(x_length+y_length, test_data.shape[1], slide))+2
             test_x = np.ndarray((test_data.shape[0], split_num, x_length, 1)) 
             test_y = np.ndarray((test_data.shape[0], split_num, y_length, 1)) 
-            scaler = MinMaxScaler(feature_range=(-1,1))
+            scaler = MinMaxScaler(feature_range=(0,1))
             for window in range(0, test_data.shape[0]):
                 scaled_data_train = scaler.fit_transform(train_data[window].reshape(-1,1))
                 scaled_data_test = scaler.fit_transform(test_data[window].reshape(-1,1))

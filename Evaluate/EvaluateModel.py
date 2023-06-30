@@ -10,10 +10,10 @@ class Evaluate:
         result_table = pd.DataFrame(columns=[
             's_date', 't_date', 'lead', 'ans_date', 'pv', 'best_fit', 'error'])
         for window in range(0, processed_signal.shape[0]):
-            if not type(best_fit_error) == None:
-                result_table.loc[window, 'error'] = round(best_fit_error[window], 2)
-            if not type(best_fit_harm) == None:
-                result_table.loc[window, 'best_fit'] = best_fit_harm[window]
+            # if not best_fit_error == None:
+            #     result_table.loc[window, 'error'] = round(best_fit_error[window], 2)
+            # if not best_fit_harm == None:
+            #     result_table.loc[window, 'best_fit'] = best_fit_harm[window]
             result_table.loc[window, 'lead'] = lead[window]
             if pv[window] == 1:
                 result_table.loc[window, 'pv'] = 'peak'
