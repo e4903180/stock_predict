@@ -1,77 +1,72 @@
-import yfinance as yf
-import datetime
-from dateutil.relativedelta import relativedelta
 import numpy as np
+import pandas as pd
+import yfinance as yf
+
 
 class LoadData:
-    def __init__(self, total_windows, window_length):
-        """Initializes the LoadData class.
+    """
+    Class to load and split stock data.
 
-        Args:
-            total_windows (int): The total number of windows.
-            window_length (int): The length of each window.
+    Attributes:
+        stock_name (str): Name of the stock.
+        window_length (int): Length of the window for splitting data.
+        slide_range (int): Range of sliding window for splitting data.
+        num_windows (int): Total number of windows for splitting data.
+        features_num (int): Number of features to consider from the stock data.
+        features (list): List of column names to consider from the stock data.
+        train_data (numpy.ndarray): Array to store training data. Shape: (num_windows, window_length, features_num)
+        train_data_index (numpy.ndarray): Array to store indices of training data. Shape: (num_windows, window_length)
+        test_data (numpy.ndarray): Array to store testing data. Shape: (num_windows, window_length, features_num)
+        test_data_index (numpy.ndarray): Array to store indices of testing data. Shape: (num_windows, window_length)
+    """
+
+    def __init__(self, stock_name, window_length, slide_range, num_windows, feature_num=1):
+        self.stock_name = stock_name
+        self.window_length = int(window_length)
+        self.slide_range = int(slide_range)
+        self.num_windows = int(num_windows)
+        self.features_num = feature_num - 1 if feature_num != 1 else 1
+        self.features = ['Close', 'Open', 'High', 'Low', 'Volume']
+        self.train_data = np.zeros(shape=(num_windows, window_length, self.features_num), dtype=float)
+        self.train_data_index = np.zeros(shape=(num_windows, window_length), dtype=object)
+        self.test_data = np.zeros(shape=(num_windows, window_length, self.features_num), dtype=float)
+        self.test_data_index = np.zeros(shape=(num_windows, window_length), dtype=object)
+
+    def load_and_split_data(self, date_predict_start):
         """
-
-        self.train_data = np.ndarray(shape=(total_windows, window_length), dtype=float)
-        self.train_data_index = np.ndarray(shape=(total_windows, window_length), dtype=object)
-        self.test_data = np.ndarray(shape=(total_windows, window_length), dtype=float)
-        self.test_data_index = np.ndarray(shape=(total_windows, window_length), dtype=object)
-        
-        self.date_data_start_list = []
-        self.date_predict_start_list = []
-        self.date_predict_end_list = []
-        self.test_data_start_list = []
-
-    def load_and_split_data(self, stock_name, date_predict_start, window_length, slide_range, total_windows):
-        """Loads and splits the data.
+        Load and split data into training and testing sets.
 
         Args:
-            stock_name (str): The stock name.
-            date_predict_start (str): The start date for prediction.
-            window_length (int): The length of each window.
-            slide_range (int): The slide range.
-            total_windows (int): The total number of windows.
+            date_predict_start (str): Start date for prediction.
 
         Returns:
-            train_data: numpy.ndarray
-                The training data arrays.
-                shape: (number of windows, window_length)
-            test_data: numpy.ndarray
-                The testing data arrays.
-                shape: (number of windows, window_length)
+            Tuple containing training data, testing data, training data indices, testing data indices, and all data.
         """
-
-        all_data = yf.Ticker(stock_name).history(period='max')
+        all_data = yf.Ticker(self.stock_name).history(period='max').drop(columns=['Dividends', 'Stock Splits'])
         all_data.index = all_data.index.date
         date_predict_start = self._check_start(date_predict_start, all_data)
         predict_start = all_data.index.get_loc(date_predict_start)
-        for i in range(total_windows):
-            predict_end = predict_start + window_length
-            data_start = predict_start - window_length
-            self.train_data[i, :] = all_data['Close'].iloc[data_start:predict_start].values
-            self.train_data_index[i, :] = all_data['Close'].iloc[data_start:predict_start].index
-            self.test_data[i, :] = all_data['Close'].iloc[predict_start:predict_end].values
-            self.test_data_index[i, :] = all_data['Close'].iloc[predict_start:predict_end].index
-            data_start = data_start + slide_range
-            predict_start = predict_start + slide_range
+        for idx in range(self.num_windows):
+            predict_end = predict_start + self.window_length
+            data_start = predict_start - self.window_length
+            self.train_data[idx, :] = all_data[self.features[:self.features_num]].iloc[data_start:predict_start].values
+            self.train_data_index[idx, :] = all_data.iloc[data_start:predict_start].index
+            self.test_data[idx, :] = all_data[self.features[:self.features_num]].iloc[predict_start:predict_end].values
+            self.test_data_index[idx, :] = all_data.iloc[predict_start:predict_end].index
+            predict_start += self.slide_range
         return self.train_data, self.test_data, self.train_data_index, self.test_data_index, all_data
 
     def _check_start(self, date_predict_start, all_data):
-        """Checks the start date for prediction.
+        """
+        Check if the prediction start date is valid.
 
         Args:
-            date_predict_start (str): The start date for prediction.
-            all_data (pandas.DataFrame): The complete data.
+            date_predict_start (str): Start date for prediction.
+            all_data (pd.DataFrame): All stock data.
 
         Returns:
-            datetime.date: The validated start date for prediction.
+            Valid start date for prediction.
         """
-
-        date_predict_start = datetime.datetime.strptime(
-            date_predict_start, '%Y-%m-%d').date()
-        check = date_predict_start in all_data.index
-        while (check == False):
-            date_predict_start = date_predict_start + \
-                relativedelta(days=+1)
-            check = date_predict_start in list(all_data.index)
-        return date_predict_start
+        date_predict_start = pd.to_datetime(date_predict_start)
+        valid_date = all_data.index.asof(date_predict_start)
+        return valid_date

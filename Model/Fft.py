@@ -34,9 +34,9 @@ class Fft():
         harmonics_train = np.ndarray((train_data.shape[0], f_positive_num, train_data.shape[1]))
         harmonics_test = np.ndarray((train_data.shape[0], f_positive_num, train_data.shape[1]))
         # (number of windows, number of positive frequencies, window_length)
-        for window in range(0, train_data.shape[0]):
+        for window_idx in range(0, train_data.shape[0]):
             # get data_stock's infomation
-            data = train_data[window]
+            data = train_data[window_idx]
             array_data = np.array(data)
             n_data = array_data.size
             time_data = np.arange(0, n_data)
@@ -51,13 +51,14 @@ class Fft():
             frequence = np.fft.fftfreq(n=n_data, d=1)
             f_positive = frequence[np.where(frequence > 0)]
             data_freqdom_positive = data_freqdom[np.where(frequence > 0)]
+            
             # sort indexes
             indexes = list(range(f_positive.size))      # frequencies
             # sort method 1
-            # indexes.sort(key = lambda window: np.absolute(frequence[window]))     # sort indexes by frequency, lower -> higher
+            # indexes.sort(key = lambda window_idx: np.absolute(frequence[window_idx]))     # sort indexes by frequency, lower -> higher
             # sort method 2 :
             # sort indexes by amplitudes, lower -> higher
-            indexes.sort(key=lambda window: np.absolute(data_freqdom[window]))
+            indexes.sort(key=lambda window_idx: np.absolute(data_freqdom[window_idx]))
             indexes.reverse()       # sort indexes by amplitudes, higher -> lower
 
             # get data_all_time'size
@@ -69,9 +70,9 @@ class Fft():
                 ampli = np.absolute(
                     data_freqdom_positive[j]) / n_data     # amplitude
                 phase = np.angle(data_freqdom_positive[j])      # phase
-                harmonics_train[window, j] = ampli * \
+                harmonics_train[window_idx, j] = ampli * \
                     np.cos(2 * np.pi * f_positive[j] * time_transfer_train + phase)
-                harmonics_test[window, j] = ampli * \
+                harmonics_test[window_idx, j] = ampli * \
                     np.cos(2 * np.pi * f_positive[j] * time_transfer_test + phase)
                 count+=1
         return harmonics_train, harmonics_test
@@ -103,10 +104,10 @@ class Fft():
             raise ValueError('mixed_harmonic_num too small')
         processed_signal = np.ndarray((harmonics.shape[0], mixed_harmonic_num, harmonics.shape[2]))
         # (number of windows, number of mixed harmonics, window_length*2)
-        for window in range(processed_signal.shape[0]):
-            for n_harm in range(processed_signal.shape[1]):
+        for window_idx in range(processed_signal.shape[0]):
+            for harm_idx in range(processed_signal.shape[1]):
                 mixed_harmonic = np.zeros(processed_signal.shape[2])
-                for j in range(n_harm_lower_limit, n_harm_lower_limit+n_harm+1): #filter DC signal
-                    mixed_harmonic += harmonics[window, j]
-                processed_signal[window, n_harm] = mixed_harmonic
+                for j in range(n_harm_lower_limit, n_harm_lower_limit+harm_idx+1): #filter DC signal
+                    mixed_harmonic += harmonics[window_idx, j]
+                processed_signal[window_idx, harm_idx] = mixed_harmonic
         return processed_signal

@@ -2,17 +2,32 @@ import numpy as np
 import math
 
 class Postprocess:
+    """A class for postprocessing signals."""
     def __init__(self):
         pass
 
     def postprocess_lstm(self, predicted_y, scaler):
+        """Postprocess the predicted LSTM signal.
+
+        Args:
+            predicted_y: numpy.ndarray
+                Predicted signal obtained from predictions.
+                shape = (number of windows, number of split y, length of y)
+            scaler: object
+                Scaler object used for inverse transformation.
+
+        Returns:
+            processed_lstm_signal: numpy.ndarray
+                Processed signal flattened from predicted_y.
+                shape = (number of windows, 1, window_length)
+        """
         inversed_signal = self._inverse_transfer(predicted_y, scaler)
         processed_lstm_signal = self._flatten(inversed_signal)
         return processed_lstm_signal
     
     def _inverse_transfer(self, predicted_y, scaler):
         """
-        flatten predictions.
+        Reverse the transformation of the predicted signal.
 
         Args:
             predicted_y: numpy.ndarray
@@ -32,10 +47,10 @@ class Postprocess:
     
     def _flatten(self, inversed_signal):
         """
-        flatten predictions.
+        Flatten the predicted signal.
 
         Args:
-            predicted_y: numpy.ndarray
+            inversed_signal: numpy.ndarray
                 Predicted signal obtained from predictions.
                 shape = (number of windows, number of split y, length of y)
 
@@ -51,6 +66,34 @@ class Postprocess:
         return flatten_signal
     
     def postprocess_fft(self, mixed_train_harm, mixed_test_harm, pv_range, pv_train_data, fit_method):
+        """Postprocess the FFT signal.
+
+        Args:
+            mixed_train_harm: numpy.ndarray
+                Mixed harmonics of the training data.
+                shape: (number of windows, number of mixed harmonics, window_length)
+            mixed_test_harm: numpy.ndarray
+                Mixed harmonics of the test data.
+                shape: (number of windows, number of mixed harmonics, window_length)
+            pv_range: int
+                The range within which peaks and valleys are detected.
+            pv_train_data: numpy.ndarray
+                Training data used for finding peaks and valleys.
+                shape: (number of windows, window_length)
+            fit_method: str
+                The method used for fitting the signal.
+
+        Returns:
+            processed_signal: numpy.ndarray
+                Processed signal.
+                shape: (number of windows, window_length)
+            best_fit_harm: numpy.ndarray
+                Indices of the best fitting harmonics for each window.
+                shape: (number of windows)
+            best_fit_error: numpy.ndarray
+                Error values of the best fitting harmonics for each window.
+                shape: (number of windows)
+        """
         pv_mixed_train_harm = self.find_data_pv(mixed_train_harm, pv_range)
         lead_mixed_train_harm = self.find_fft_lead(pv_train_data, pv_mixed_train_harm)
         errors = self._get_fit_error(lead_mixed_train_harm, fit_method)
@@ -96,19 +139,17 @@ class Postprocess:
         return pv
     
     def _find_pv(self, data, pv_range):
-        """
-        Find peaks and valleys in the data.
+        """Find peaks and valleys in the data.
 
         Args:
-            data (numpy.ndarray):
+            data: numpy.ndarray
                 The input data array.
-            pv_range (int):
+            pv_range: int
                 The range within which peaks and valleys are detected.
 
         Returns:
-            pv (numpy.ndarray):
-                An array of the same shape as `data`, where peaks are represented by 1,
-                valleys are represented by -1, and other points are represented by 0.
+            pv: numpy.ndarray
+                Array representing peaks (1), valleys (-1), and other points (0).
 
         Raises:
             None
@@ -128,21 +169,20 @@ class Postprocess:
         return pv
     
     def _find_peak_lead(self, element, pv_data, pv_signal):
-        """
-        Find the lead for a peak element.
+        """Find the lead for a peak element.
 
         Args:
-            element (tuple):
+            element: tuple
                 Tuple containing the index and value of the element.
-            pv_train_data (numpy.ndarray):
+            pv_train_data: numpy.ndarray
                 Data array used for finding peaks and valleys.
                 shape: (window_length)
-            pv_signal (numpy.ndarray):
+            pv_signal: numpy.ndarray
                 Signal array containing peaks (1), valleys (-1), and others (0).
                 shape: (window_length)
 
         Returns:
-            lead (int):
+            lead: int
                 Lead value for the peak element.
 
         Raises:
@@ -174,21 +214,20 @@ class Postprocess:
         return lead
 
     def _find_valley_lead(self, element, pv_train_data, pv_signal):
-        """
-        Find the lead for a valley element.
+        """Find the lead for a valley element.
 
         Args:
-            element (tuple):
+            element: tuple
                 Tuple containing the index and value of the element.
-            pv_train_data (numpy.ndarray):
+            pv_train_data: numpy.ndarray
                 Data array used for finding peaks and valleys.
                 shape: (window_length)
-            pv_signal (numpy.ndarray):
+            pv_signal: numpy.ndarray
                 Signal array containing peaks (1), valleys (-1), and others (0).
                 shape: (window_length)
 
         Returns:
-            lead (int):
+            lead: int
                 Lead value for the valley element.
 
         Raises:
@@ -220,19 +259,18 @@ class Postprocess:
         return lead
     
     def find_lead(self, pv_data, pv_signal):
-        """
-        Find the lead values for peak and valley elements.
+        """Find the lead values for peak and valley elements.
 
         Args:
-            pv_data (numpy.ndarray):
+            pv_data: numpy.ndarray
                 Data array used for finding peaks and valleys.
                 shape: (number of windows, window_length)
-            pv_signal (numpy.ndarray):
+            pv_signal: numpy.ndarray
                 Signal array containing peaks (1), valleys (-1), and others (0).
                 shape: (number of windows, window_length)
 
         Returns:
-            lead_list (numpy.ndarray):
+            lead: numpy.ndarray
                 Array containing the lead values for each element.
                 shape: (number of windows, window_length)
 
@@ -251,19 +289,18 @@ class Postprocess:
         return lead
 
     def find_fft_lead(self, pv_data, pv_fft_signal):
-        """
-        Find the lead values for peak and valley elements.
+        """Find the lead values for peak and valley elements in the FFT signal.
 
         Args:
-            pv_data (numpy.ndarray):
+            pv_data: numpy.ndarray
                 Data array used for finding peaks and valleys.
                 shape: (number of windows, window_length)
-            pv_signal (numpy.ndarray):
+            pv_signal: numpy.ndarray
                 Signal array containing peaks (1), valleys (-1), and others (0).
                 shape: (number of windows, window_length)
 
         Returns:
-            lead_list (numpy.ndarray):
+            lead: numpy.ndarray
                 Array containing the lead values for each element.
                 shape: (number of windows, window_length)
 
@@ -283,6 +320,19 @@ class Postprocess:
         return lead
     
     def _compute_error_maen(self, lead):
+        """Compute the mean error value.
+
+        Args:
+            lead: numpy.ndarray
+                Array containing the lead values.
+
+        Returns:
+            error: float
+                Mean error value.
+
+        Raises:
+            None
+        """
         error = 0
         for num in lead:
             if num is not None:
@@ -290,6 +340,19 @@ class Postprocess:
         return error/lead.shape[0]
 
     def _compute_error_abs(self, lead):
+        """Compute the absolute error value.
+
+        Args:
+            lead: numpy.ndarray
+                Array containing the lead values.
+
+        Returns:
+            error: float
+                Absolute error value.
+
+        Raises:
+            None
+        """
         error = 0
         for num in lead:
             if num is not None:
@@ -297,6 +360,19 @@ class Postprocess:
         return error/lead.shape[0]
 
     def _compute_error_rmse(self, lead):
+        """Compute the root mean square error value.
+
+        Args:
+            lead: numpy.ndarray
+                Array containing the lead values.
+
+        Returns:
+            error: float
+                Root mean square error value.
+
+        Raises:
+            None
+        """
         error = 0
         for num in lead:
             if num is not None:
@@ -307,6 +383,23 @@ class Postprocess:
         return error/lead.shape[0]
 
     def _get_fit_error(self, lead_mixed_train_harm, fit_method):
+        """Compute the error values for fitting.
+
+        Args:
+            lead_mixed_train_harm: numpy.ndarray
+                Array containing the lead values for each element.
+                shape: (number of windows, number of harmonics)
+            fit_method: str
+                The method used for fitting the signal.
+
+        Returns:
+            errors: numpy.ndarray
+                Array containing the error values.
+                shape: (number of windows, number of harmonics)
+
+        Raises:
+            None
+        """
         errors = np.ndarray([lead_mixed_train_harm.shape[0], lead_mixed_train_harm.shape[1]])
         error = int()
         for i in range(0, lead_mixed_train_harm.shape[0]):
@@ -323,6 +416,24 @@ class Postprocess:
         return errors
 
     def _get_best_fit(self, errors):
+        """Get the best fitting harmonics and their error values.
+
+        Args:
+            errors: numpy.ndarray
+                Array containing the error values.
+                shape: (number of windows, number of harmonics)
+
+        Returns:
+            best_fit_harm: numpy.ndarray
+                Array containing the indices of the best fitting harmonics.
+                shape: (number of windows)
+            best_fit_error: numpy.ndarray
+                Array containing the error values of the best fitting harmonics.
+                shape: (number of windows)
+
+        Raises:
+            None
+        """
         best_fit_harm = np.ndarray(errors.shape[0])
         best_fit_error = np.ndarray(errors.shape[0])
         for window in range(errors.shape[0]):
@@ -331,31 +442,48 @@ class Postprocess:
         return best_fit_harm, best_fit_error
 
     def _pick_best_fit_harm(self, mixed_test_harm, best_fit_harm):
+        """Pick the best fitting harmonics.
+
+        Args:
+            mixed_test_harm: numpy.ndarray
+                Mixed harmonics of the test data.
+                shape: (number of windows, number of mixed harmonics, window_length)
+            best_fit_harm: numpy.ndarray
+                Array containing the indices of the best fitting harmonics.
+                shape: (number of windows)
+
+        Returns:
+            processed_signal: numpy.ndarray
+                Processed signal.
+                shape: (number of windows, window_length)
+
+        Raises:
+            None
+        """
         processed_signal = np.ndarray([mixed_test_harm.shape[0], mixed_test_harm.shape[2]])
         for window in range(0, mixed_test_harm.shape[0]):
             processed_signal[window] = mixed_test_harm[window, int(best_fit_harm[window])]
         return processed_signal
 
     def get_first_lead(self, pv_signal, lead_test):
-        """
-        Get the first lead values for each window.
+        """Get the first lead values for each window.
 
         Args:
-            pv_signal (numpy.ndarray):
+            pv_signal: numpy.ndarray
                 Signal array containing peaks (1), valleys (-1), and others (0).
                 shape: (number of windows, window_length)
-            lead_test (numpy.ndarray):
+            lead_test: numpy.ndarray
                 Array containing the lead values for each element.
                 shape: (number of windows, window_length)
 
         Returns:
-            first_date (numpy.ndarray):
+            first_date: numpy.ndarray
                 Array containing the index of the first non-zero element in each window.
                 shape: (number of windows)
-            lead (numpy.ndarray):
+            lead: numpy.ndarray
                 Array containing the lead values for each window.
                 shape: (number of windows)
-            pv (numpy.ndarray):
+            pv: numpy.ndarray
                 Array containing the peak/valley values for each window.
                 shape: (number of windows)
 
